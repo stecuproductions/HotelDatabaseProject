@@ -1,166 +1,9 @@
---Functions
-
--- calculate_total_price: 
--- This function returns  the total price of the reservation. It takes two IN arguments as an input: 
--- id_services as an table of reservation services ids to calculate their total price. 
--- Id_room as an integer to calculate total price using the formula price_per_day  * days 
--- Start_date as a date  as a date of the start of the reservation 
--- End_date as a date of the end of the reservation 
-
-CREATE OR REPLACE TYPE service_id_table AS TABLE OF NUMBER;
-/
-CREATE OR REPLACE FUNCTION calculate_total_price (
-    p_id_services IN service_id_table,
-    p_id_room     IN NUMBER,
-    p_start_date  IN DATE,
-    p_end_date    IN DATE
-)
-RETURN NUMBER
-IS
-    v_total_price         NUMBER(10, 2) := 0;
-    v_price_per_night     NUMBER(10, 2);
-    v_days                NUMBER;
-    v_service_price       NUMBER(10, 2);
-BEGIN
-    v_days := TRUNC(p_end_date) - TRUNC(p_start_date);
-    IF v_days < 1 THEN
-        v_days := 1; 
-    END IF;
-
-    SELECT price_per_night INTO v_price_per_night
-    FROM rooms
-    WHERE id_room = p_id_room;
-
-    v_total_price := v_days * v_price_per_night;
-
-    FOR i IN 1 .. p_id_services.COUNT LOOP
-        SELECT service_price INTO v_service_price
-        FROM services
-        WHERE id_service = p_id_services(i);
-
-        v_total_price := v_total_price + v_service_price;
-    END LOOP;
-
-    RETURN v_total_price;
-
-EXCEPTION
-    WHEN NO_DATA_FOUND THEN
-        RAISE_APPLICATION_ERROR(-20001, 'Invalid room ID or service ID');
-    WHEN OTHERS THEN
-        RAISE_APPLICATION_ERROR(-20002, 'Error calculating total price: ' || SQLERRM);
-END;
-/
-
---Usage
-DECLARE
-    price NUMBER;
-    services service_id_table := service_id_table(1, 2, 3); 
-BEGIN
-    price := calculate_total_price(services, 1, DATE '2025-06-01', DATE '2025-06-05');
-    DBMS_OUTPUT.PUT_LINE('Total price: ' || price);
-END;
-/
-
-
---is_room_available 
--- This function returns a boolean true or false depending on the availability of the room in a certain date. It takes two IN arguments as an input. 
--- Start_date as a date of the start of the reservation
--- End_date as a date of the end of the reservation
--- Room_id as the id of the room that is going to be checked. 
-CREATE OR REPLACE FUNCTION is_room_available (
-    p_start_date IN DATE,
-    p_end_date   IN DATE,
-    p_room_id    IN NUMBER
-)
-RETURN BOOLEAN
-IS
-    v_exists NUMBER;
-BEGIN
-    SELECT COUNT(*) INTO v_exists
-    FROM rooms
-    WHERE id_room = p_room_id;
-
-    IF v_exists = 0 THEN
-        RETURN FALSE;
-    END IF;
-
-    SELECT COUNT(*) INTO v_exists
-    FROM reservations
-    WHERE id_room = p_room_id
-      AND status IN ('Awaiting', 'Active')
-      AND (
-            start_date <= p_end_date
-        AND end_date >= p_start_date
-      );
-
-    IF v_exists > 0 THEN
-        RETURN FALSE; 
-    ELSE
-        RETURN TRUE; 
-    END IF;
-
-EXCEPTION
-    WHEN OTHERS THEN
-        RETURN FALSE; 
-END;
-/
-
---Usage
-DECLARE
-    available BOOLEAN;
-BEGIN
-    available := is_room_available(DATE '2025-07-01', DATE '2025-07-05', 1);
-
-    IF available THEN
-        DBMS_OUTPUT.PUT_LINE('Room is available!');
-    ELSE
-        DBMS_OUTPUT.PUT_LINE('Room is NOT available!');
-    END IF;
-END;
-/
-
---calculate_tax_or_no_tax_income
--- • Is_taxed as a Boolean describing wheather the calculated income should be 
--- taxed  
--- • Income_date as a date of the day which income is going to be calculated.
-CREATE OR REPLACE FUNCTION calculate_tax_or_no_tax_income (
-    p_is_taxed     IN BOOLEAN,
-    p_income_date  IN DATE
-)
-RETURN NUMBER
-IS
-    v_raw_income NUMBER(10,2) := 0;
-    v_final_income NUMBER(10,2);
-    v_tax_rate CONSTANT NUMBER := 0.23; -- 23% VAT
-BEGIN
-    SELECT NVL(SUM(amount), 0)
-    INTO v_raw_income
-    FROM payments
-    WHERE TRUNC(payment_date) = TRUNC(p_income_date);
-
-    IF p_is_taxed THEN
-        v_final_income := v_raw_income * (1 - v_tax_rate);
-    ELSE
-        v_final_income := v_raw_income;
-    END IF;
-
-    RETURN v_final_income;
-
-EXCEPTION
-    WHEN OTHERS THEN
-        RETURN 0; 
-END;
-/
-
---Procedures
-
---See_free_rooms_on_date 
+-- See_free_rooms_on_date 
 -- This function returns free rooms on the given date takes two IN arguments as an input 
 -- and returns the records of free rooms. It takes three IN agruments 
 -- Start date 
 -- End date 
 -- Room type 
- 
 CREATE OR REPLACE PROCEDURE see_free_rooms_on_date (
     p_start_date IN DATE,
     p_end_date   IN DATE,
@@ -196,15 +39,6 @@ BEGIN
     CLOSE free_rooms;
 END;
 /
-
-SET SERVEROUTPUT ON;
-BEGIN
-    see_free_rooms_on_date(
-        TO_DATE('2026-06-01', 'YYYY-MM-DD'),
-        TO_DATE('2028-06-05', 'YYYY-MM-DD'),
-        'double'
-    );
-END;
 
 -- add_reservation_with_services 
 -- Thisthis procedure  adds a reservation to a database. It takes five in arguments: 
@@ -252,7 +86,7 @@ BEGIN
     VALUES (p_id_guest, p_id_room, p_start_date, p_end_date, v_total_price, 'Awaiting')
     RETURNING id_reservation INTO v_new_res_id;
 
-    UPDATE rooms SET isAvailable = 'N'
+    UPDATE rooms SET is_available = 'N'
     WHERE id_room = p_id_room;
 
     IF p_service_ids IS NOT NULL THEN
@@ -268,13 +102,6 @@ EXCEPTION
     WHEN OTHERS THEN
         DBMS_OUTPUT.PUT_LINE('Wystąpił błąd: ' || SQLERRM);
         RAISE;
-END;
-/
---Usage
-DECLARE
-    v_service_ids service_id_table := service_id_table(1, 2, 3);
-BEGIN
-    add_reservation_with_services(1, 1, DATE '2025-07-01', DATE '2025-08-05', v_service_ids);
 END;
 /
 
@@ -302,7 +129,7 @@ BEGIN
 
     IF v_res_status = 'Active' THEN
         UPDATE rooms
-        SET isAvailable = 'Y'
+        SET is_available = 'Y'
         WHERE id_room = v_room_id;
     END IF;
 
@@ -316,12 +143,6 @@ EXCEPTION
         RAISE;
 END;
 /
---Usage
-BEGIN
-    cancel_reservation(1); 
-END;
-/
-
 
 -- update_room_price 
 -- This procedure updates the room price. It uses two in arguments: 
@@ -355,65 +176,6 @@ EXCEPTION
         RAISE;
 END;
 /
---Usage
-BEGIN
-    update_room_price(2, 150.00); 
-END;
-
---Triggers
---Prevent_double_booking 
---It throws an exception when the administrator is trying to book already booked room. 
-
-CREATE OR REPLACE TRIGGER prevent_double_booking
-BEFORE INSERT OR UPDATE ON reservations
-FOR EACH ROW
-DECLARE
-    v_conflict_count NUMBER;
-BEGIN
-    SELECT COUNT(*) INTO v_conflict_count
-    FROM reservations
-    WHERE id_room = :NEW.id_room
-      AND status IN ('Awaiting', 'Active')
-      AND (
-            :NEW.start_date <= end_date
-        AND :NEW.end_date >= start_date
-      )
-      AND (:NEW.id_reservation IS NULL OR id_reservation != :NEW.id_reservation);
-
-    IF v_conflict_count > 0 THEN
-        RAISE_APPLICATION_ERROR(-20003, 'Double booking not allowed: the room is already booked in the given date range.');
-    END IF;
-END;
-/
-
-
--- free_room_on_cancellation 
--- It sets room status to  ‘free’  when the book is CURRENTLY occupied and the reservation is cancelled. 
-CREATE OR REPLACE TRIGGER free_room_on_cancellation
-AFTER UPDATE ON reservations
-FOR EACH ROW
-WHEN (
-    OLD.status = 'Active' AND NEW.status = 'Cancelled'
-)
-BEGIN
-    UPDATE rooms
-    SET isAvailable = 'Y'
-    WHERE id_room = :NEW.id_room;
-END;
-/
-
-
--- validate_reservation_dates 
--- It prevents from inserting a reservation with date earlier than todays date. 
-CREATE OR REPLACE TRIGGER validate_reservation_dates
-BEFORE INSERT OR UPDATE ON reservations
-FOR EACH ROW
-BEGIN
-    IF :NEW.start_date < TRUNC(SYSDATE) OR :NEW.end_date < TRUNC(SYSDATE) THEN
-        RAISE_APPLICATION_ERROR(-20004, 'Reservation dates cannot be in the past.');
-    END IF;
-END;
-/
 
 --DATABASE WILL HAVE DBMS_SCHEDULER WHICH WILL SET THE ROOM AVAILABILITY ACCORDING TO CURRENT DATE. 
 CREATE OR REPLACE PROCEDURE update_reservations_and_rooms
@@ -430,7 +192,7 @@ BEGIN
       AND TRUNC(end_date) < TRUNC(SYSDATE);
 
     UPDATE rooms
-    SET isAvailable = 'N'
+    SET is_available = 'N'
     WHERE id_room IN (
         SELECT id_room
         FROM reservations
@@ -439,7 +201,7 @@ BEGIN
     );
 
     UPDATE rooms
-    SET isAvailable = 'Y'
+    SET is_available = 'Y'
     WHERE id_room NOT IN (
         SELECT id_room
         FROM reservations
@@ -448,7 +210,6 @@ BEGIN
     );
 END;
 /
-
 
 BEGIN
     DBMS_SCHEDULER.CREATE_JOB (
