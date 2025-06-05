@@ -62,3 +62,72 @@ SELECT r.id_reservation, r.start_date, r.end_date, r.total_price FROM reservatio
 JOIN guests g ON r.id_guest = g.id_guest
 WHERE g.first_name = 'John' AND g.last_name = 'Doe';
 
+-- 4. Service Management
+-- • Add and update additional services
+INSERT INTO services (service_name, service_price) VALUES ('Laundry Service', 60.00);
+INSERT INTO services (service_name, service_price) VALUES ('Pet Fee', 70.00);
+
+DECLARE
+    v_service_id_to_update NUMBER;
+BEGIN
+    SELECT id_service INTO v_service_id_to_update
+    FROM services
+    WHERE service_name = 'Pet Fee';
+
+    update_service(
+        p_id_service        => v_service_id_to_update,
+        p_new_service_name  => 'Extended Pet Stay Fee',
+        p_new_service_price => 75.00
+    );
+    
+    DBMS_OUTPUT.PUT_LINE('Service with ID: ' || v_service_id_to_update || ' has been updated.');
+    
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('Service with name "Pet Fee" not found.');
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('An error occurred while updating the service: ' || SQLERRM);
+END;
+/
+
+-- • The services can be assigned to the reservation
+-- ??? nwm czy chodzi o to ze jest procedura czy co
+
+-- 5. Reservation Services Management
+-- • Identifiers are used to calculated total price of the reservation
+-- Example of calling calculate_total_price function
+DECLARE
+    v_total_calculated_price NUMBER;
+    v_service_ids service_id_table := service_id_table(1, 3); 
+    v_room_id NUMBER := 1;
+    v_start_date DATE := DATE '2025-08-01';
+    v_end_date DATE := DATE '2025-08-03';
+BEGIN
+    v_total_calculated_price := calculate_total_price(
+        p_id_services => v_service_ids,
+        p_id_room     => v_room_id,
+        p_start_date  => v_start_date,
+        p_end_date    => v_end_date
+    );
+
+    DBMS_OUTPUT.PUT_LINE('Calculated Total Reservation Price: ' || v_total_calculated_price);
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+        RAISE;
+END;
+/
+
+-- • Ability to extend each reservation with additional services
+-- Przykład użycia procedury add_services_to_existing_reservation
+DECLARE
+    v_existing_reservation_id NUMBER := 1;
+    v_services_to_add service_id_table := service_id_table(2, 4);
+BEGIN
+    add_services_to_existing_reservation(
+        p_id_reservation  => v_existing_reservation_id,
+        p_new_service_ids => v_services_to_add
+    );
+END;
+/

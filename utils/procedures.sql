@@ -223,3 +223,84 @@ BEGIN
     );
 END;
 /
+
+-- update_service
+-- This procedure updates the name and price of an existing service. It uses three IN arguments:
+-- • p_id_service – the ID of the service that is going to have its details changed
+-- • p_new_service_name – the new name for the service
+-- • p_new_service_price – the new price for the service
+CREATE OR REPLACE PROCEDURE update_service (
+    p_id_service        IN services.id_service%TYPE,
+    p_new_service_name  IN services.service_name%TYPE,
+    p_new_service_price IN services.service_price%TYPE
+)
+IS
+BEGIN
+    UPDATE services
+    SET service_name = p_new_service_name,
+        service_price = p_new_service_price
+    WHERE id_service = p_id_service;
+
+    IF SQL%NOTFOUND THEN
+        RAISE_APPLICATION_ERROR(-20010, 'Service with ID ' || p_id_service || ' not found.');
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE;
+END;
+/
+
+-- add_services_to_existing_reservation
+-- This procedure adds new services to an already existing reservation and updates the reservation's total price. It uses two IN arguments:
+-- • p_id_reservation – the ID of the reservation to which services will be added
+-- • p_new_service_ids – a table collection of service IDs that are to be added to the reservation
+CREATE OR REPLACE PROCEDURE add_services_to_existing_reservation (
+    p_id_reservation   IN reservations.id_reservation%TYPE,
+    p_new_service_ids  IN service_id_table
+)
+IS
+    v_reservation_exists NUMBER;
+    v_current_room_id reservations.id_room%TYPE;
+    v_current_start_date reservations.start_date%TYPE;
+    v_current_end_date reservations.end_date%TYPE;
+    v_all_service_ids service_id_table;
+    v_new_total_price reservations.total_price%TYPE;
+BEGIN
+    SELECT COUNT(*), id_room, start_date, end_date
+    INTO v_reservation_exists, v_current_room_id, v_current_start_date, v_current_end_date
+    FROM reservations
+    WHERE id_reservation = p_id_reservation
+    GROUP BY id_room, start_date, end_date;
+
+    IF v_reservation_exists = 0 THEN
+        RAISE_APPLICATION_ERROR(-20011, 'Reservation with ID ' || p_id_reservation || ' not found.');
+    END IF;
+
+    FOR i IN 1 .. p_new_service_ids.COUNT LOOP
+        INSERT INTO reservation_services (id_reservation, id_service)
+        VALUES (p_id_reservation, p_new_service_ids(i));
+    END LOOP;
+
+    SELECT id_service BULK COLLECT INTO v_all_service_ids
+    FROM reservation_services
+    WHERE id_reservation = p_id_reservation;
+
+    v_new_total_price := calculate_total_price(
+        p_id_services => v_all_service_ids,
+        p_id_room     => v_current_room_id,
+        p_start_date  => v_current_start_date,
+        p_end_date    => v_current_end_date
+    );
+
+    UPDATE reservations
+    SET total_price = v_new_total_price
+    WHERE id_reservation = p_id_reservation;
+
+    DBMS_OUTPUT.PUT_LINE('Services successfully added to reservation ' || p_id_reservation || ' and total price updated.');
+
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error adding services to reservation: ' || SQLERRM);
+        RAISE;
+END;
+/
