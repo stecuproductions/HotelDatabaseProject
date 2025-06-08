@@ -131,3 +131,33 @@ BEGIN
     );
 END;
 /
+
+-- 6. Payment Processing
+-- • Register of payments related with reservations
+INSERT INTO reservations (id_guest, id_room, start_date, end_date, total_price) VALUES 
+(1, 2, DATE '2025-07-01', DATE '2025-07-04', 900.00);
+INSERT INTO payments (id_reservation, payment_date, amount, payment_method)
+VALUES (6, DATE '2025-06-30', 900.00, 'Card');
+-- • Ability to include the tax while reporting the income of the hotel
+DECLARE
+    income_with_tax NUMBER;
+    income_without_tax NUMBER;
+BEGIN
+    income_with_tax := calculate_tax_or_no_tax_income('Y', DATE '2025-06-30');
+    DBMS_OUTPUT.PUT_LINE('income with tax: '|| income_with_tax);
+    income_without_tax := calculate_tax_or_no_tax_income('N', DATE '2025-06-30');
+    DBMS_OUTPUT.PUT_LINE('income without tax: '|| income_without_tax);
+END;
+/
+
+-- 7. Business Rules and Data Violation
+-- • Prevent bookings on unavailable rooms
+INSERT INTO reservations (id_guest, id_room, start_date, end_date, total_price) VALUES 
+(1, 1, DATE '2025-07-01', DATE '2025-07-05', 720.00);
+-- this wont work:
+INSERT INTO reservations (id_guest, id_room, start_date, end_date, total_price) VALUES 
+(2, 1, DATE '2025-07-03', DATE '2025-07-07', 720.00);
+-- • Forbidden deletion of guests with pending or unpaid stay
+-- NIE WIEM???? chyba nie ma takiego triggera
+
+
