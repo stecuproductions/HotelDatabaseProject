@@ -90,9 +90,6 @@ EXCEPTION
 END;
 /
 
--- • The services can be assigned to the reservation
--- ??? nwm czy chodzi o to ze jest procedura czy co
-
 -- 5. Reservation Services Management
 -- • Identifiers are used to calculated total price of the reservation
 -- Example of calling calculate_total_price function
@@ -157,7 +154,6 @@ INSERT INTO reservations (id_guest, id_room, start_date, end_date, total_price) 
 -- this wont work:
 INSERT INTO reservations (id_guest, id_room, start_date, end_date, total_price) VALUES 
 (2, 1, DATE '2025-07-03', DATE '2025-07-07', 720.00);
--- • Forbidden deletion of guests with pending or unpaid stay
--- NIE WIEM???? chyba nie ma takiego triggera
+
 
 
